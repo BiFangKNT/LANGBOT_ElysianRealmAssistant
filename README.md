@@ -39,4 +39,17 @@
 
 ## 使用
 
-<!-- 插件开发者自行填写插件使用说明 -->
+**效果展示**
+
+![image](https://github.com/user-attachments/assets/1bc153fa-638f-4326-af09-9f8ff6d4f845)
+![image](https://github.com/user-attachments/assets/e5edef8e-856b-4cf5-9aca-c12966708877)
+![image](https://github.com/user-attachments/assets/0ff56e9f-8b57-4201-b549-639ccbeed87a)
+![image](https://github.com/user-attachments/assets/7c1fdb53-1667-407c-8883-f4ef4e6dcb6e)
+
+**角色名部分仅匹配五个字符**
+
+![image](https://github.com/user-attachments/assets/a46def16-22ef-4b2c-9aa5-71509fddb7ec)
+
+
+
+
