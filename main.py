@@ -132,6 +132,12 @@ class ElysianRealmAssistant(BasePlugin):
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
                 return "攻略url为：\n", mirai.Image(url=image_url)
         return "未找到相关的乐土攻略。"
+                image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
+                return [
+                    mirai.Plain("已为您找到攻略：\n"),
+                    mirai.Image(url=image_url)
+                ]
+        return [mirai.Plain("未找到相关的乐土攻略。")]
 
     # 插件卸载时触发
     def __del__(self):
