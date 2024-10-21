@@ -128,3 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea
+ElysianRealmConfig.yaml.orig
+main.py.orig
