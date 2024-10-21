@@ -6,7 +6,7 @@ import os
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.0", author="BiFangKNT")
+@register(name="ElysianRealmAssistant", description="崩坏3往事乐土攻略助手", version="1.1", author="BiFangKNT")
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
@@ -27,7 +27,7 @@ class ElysianRealmAssistant(BasePlugin):
                 (?P<角色乐土>(.{{1,5}})乐土\d?) |             # 匹配1-5个字符后跟"乐土"，可选择性地跟随一个数字
                 (?P<角色流派>(.{{1,5}})({flow_pattern})流)    # 匹配1-5个字符，后跟特定的流派名称
             )$
-            '''，
+            ''',
             re.VERBOSE
         )
         self.recommendation = "赫丽娅星环流"
