@@ -51,6 +51,11 @@
 ![image](https://github.com/user-attachments/assets/9bc12c87-4ce0-426d-aa75-20c9b125f0ac)
 
 
+**v1.2更新说明**
+
+提供了以下报错的临时解决方案。此问题是偶发性的，我一开始没问题，后来突然就报错了，查了一下貌似是bot框架本身的权限问题。我测试过用插件可以下载图片，却发不出去，应该不是网络问题。
+![image](https://github.com/user-attachments/assets/1e6cbd03-cb9c-4ee0-b249-7d80363cb71a)
+![image](https://github.com/user-attachments/assets/978c7dd8-e5b7-4d77-810e-a371ceceed53)
 
 
 
