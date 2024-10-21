@@ -1,22 +1,27 @@
 from pkg.plugin.context import register, handler, llm_func, BasePlugin, APIHost, EventContext
 from pkg.plugin.events import *  # 导入事件类
 import yaml
-import regex as re
+import re
 import os
-import requests
-import time
-import base64
-import imghdr
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.2", author="BiFangKNT")
+<<<<<<< HEAD
+@register(name="ElysianRealmAssistant", description="崩坏3往事乐土攻略助手", version="1.0", author="BiFangKNT")
+=======
+@register(name="ElysianRealmAssistant", description="崩坏3往事乐土攻略助手", version="1.1", author="BiFangKNT")
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
     def __init__(self, host: APIHost):
         super().__init__(host)
         self.config = self.load_config()
+        flow_types = [
+            "蓄力", "分支", "普攻", "武器", "大招", "塑灵", "结命", 
+            "安愈", "凋换", "板砖", "弹反", "混合", "星环", "睡觉"
+        ]
+        flow_pattern = "|".join(flow_types)
         
         self.url_pattern = re.compile(
             rf'''
@@ -24,10 +29,10 @@ class ElysianRealmAssistant(BasePlugin):
                 ((.{{0,5}})乐土list) |                        # 匹配0-5个字符后跟"乐土list"
                 (乐土推荐) |                                  # 匹配"乐土推荐"
                 (?P<角色乐土>(.{{1,5}})乐土\d?) |             # 匹配1-5个字符后跟"乐土"，可选择性地跟随一个数字
-                (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流)    # 匹配1-5个字符，后跟任意两个中文字符和"流"
+                (?P<角色流派>(.{{1,5}})({flow_pattern})流)    # 匹配1-5个字符，后跟特定的流派名称
             )$
             ''',
-            re.VERBOSE | re.UNICODE
+            re.VERBOSE
         )
         self.recommendation = "赫丽娅星环流"
         self.update_date = "2024年10月14日"
@@ -81,33 +86,39 @@ class ElysianRealmAssistant(BasePlugin):
 
         if optimized_message:
             # 输出信息
-            self.ap.logger.debug(f"处理后的消息: {optimized_message}")  # 注意：使用base64的话，此项输出会非常长
-            
-            # 添加重试逻辑
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    ctx.add_return('reply', optimized_message)
-                    self.ap.logger.info("消息已成功添加到返回队列")
-                    break
-                except Exception as e:
-                    if attempt < max_retries - 1:
-                        self.ap.logger.info(f"发送消息失败，正在重试 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                        time.sleep(1)  # 等待1秒后重试
-                    else:
-                        self.ap.logger.info(f"发送消息失败，已达到最大重试次数: {str(e)}")
+            self.ap.logger.info(f"处理后的消息: {optimized_message}")
+
+            # 回复消息
+<<<<<<< HEAD
+            if isinstance(optimized_message, tuple):
+                text, image = optimized_message
+                ctx.add_return('reply', text)
+                ctx.add_return('reply', image)
+            else:
+                ctx.add_return('reply', optimized_message)
+=======
+            ctx.add_return('reply', optimized_message)
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 
             # 阻止该事件默认行为
             ctx.prevent_default()
 
+<<<<<<< HEAD
+            # 记消息已被处理
+=======
             # 标记消息已被处理
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
             setattr(ctx, 'message_processed', True)
         else:
             self.ap.logger.info("消息处理后为空，不进行回复")
 
     def convert_message(self, message):
         if message == "乐土list":
+<<<<<<< HEAD
+            return yaml.dump(self.config, allow_unicode=True)
+=======
             return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 
         if message == "乐土推荐":
             return self.handle_recommendation()
@@ -121,62 +132,43 @@ class ElysianRealmAssistant(BasePlugin):
         for key, values in self.config.items():
             if self.recommendation in values:
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
-                image_data = self.get_image(image_url, key)
-                if image_data:
-                    return [
-                        mirai.Plain(f"本期乐土推荐更新于{self.update_date}\n推荐为：\n"),
-                        image_data
-                    ]
+<<<<<<< HEAD
+                return f"本期乐土推荐更新于{self.update_date}\n推荐为：\n", mirai.Image(url=image_url)
+        return "未找到推荐的乐土攻略。"
+=======
+                return [
+                    mirai.Plain(f"本期乐土推荐更新于{self.update_date}\n推荐为：\n"),
+                    mirai.Image(url=image_url)
+                ]
         return [mirai.Plain("未找到推荐的乐土攻略。")]
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 
     def handle_list_query(self, message):
         query = message.replace("list", "").strip()
         for key, values in self.config.items():
             if query in values:
+<<<<<<< HEAD
+                return yaml.dump({key: values}, allow_unicode=True)
+        return "未找到相关的乐土信息。"
+=======
                 return [mirai.Plain(yaml.dump({key: values}, allow_unicode=True))]
         return [mirai.Plain("未找到相关的乐土list信息。")]
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 
     def handle_normal_query(self, message):
         for key, values in self.config.items():
             if message in values:
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
-                image_data = self.get_image(image_url, key)
-                if image_data:
-                    return [
-                        mirai.Plain("已为您找到攻略：\n"),
-                        image_data
-                    ]
+<<<<<<< HEAD
+                return "攻略url为：\n", mirai.Image(url=image_url)
+        return "未找到相关的乐土攻略。"
+=======
+                return [
+                    mirai.Plain("已为您找到攻略：\n"),
+                    mirai.Image(url=image_url)
+                ]
         return [mirai.Plain("未找到相关的乐土攻略。")]
-
-    def get_image(self, url, filename):
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                # 方法1：使用Base64编码
-                image_base64 = base64.b64encode(response.content).decode('utf-8')
-                return mirai.Image(base64=image_base64)
-
-                # 方法2：使用URL
-                # return mirai.Image(url=url)
-
-                # 方法3：下载到本地并验证
-                # plugin_dir = os.path.dirname(os.path.abspath(__file__))
-                # cache_dir = os.path.join(plugin_dir, 'cache')
-                # os.makedirs(cache_dir, exist_ok=True)
-                # local_path = os.path.join(cache_dir, f"{filename}.jpg")
-                # with open(local_path, 'wb') as f:
-                #     f.write(response.content)
-                # if imghdr.what(local_path) == 'jpeg':
-                #     self.ap.logger.info(f"图片已下载到本地并验证: {local_path}")
-                #     return mirai.Image(path=local_path)
-                # else:
-                #     self.ap.logger.warning(f"下载的文件不是有效的JPEG图片: {local_path}")
-                #     return None
-            else:
-                self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
-        except Exception as e:
-            self.ap.logger.info(f"获取图片时发生错误: {str(e)}")
-        return None
+>>>>>>> 6b317da (修复图片发送逻辑，更新列表)
 
     # 插件卸载时触发
     def __del__(self):
