@@ -62,10 +62,6 @@ class ElysianRealmAssistant(BasePlugin):
             return {}
 
     async def ElysianRealmAssistant(self, ctx: EventContext):
-        # 检查消息是否已经被处理过
-        if hasattr(ctx, 'message_processed'):
-            self.ap.logger.info("消息已被处理，跳过")
-            return
 
         msg = ctx.event.text_message
 
@@ -100,8 +96,8 @@ class ElysianRealmAssistant(BasePlugin):
             # 阻止该事件默认行为
             ctx.prevent_default()
 
-            # 标记消息已被处理
-            setattr(ctx, 'message_processed', True)
+            # 阻止后续插件执行
+            ctx.prevent_postorder()
         else:
             self.ap.logger.info("消息处理后为空，不进行回复")
 
