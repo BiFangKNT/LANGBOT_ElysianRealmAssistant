@@ -37,11 +37,8 @@ class ElysianRealmAssistant(BasePlugin):
         pass
 
     @handler(PersonNormalMessageReceived)
-    async def on_person_message(self, ctx: EventContext):
-        await self.ElysianRealmAssistant(ctx)
-
     @handler(GroupNormalMessageReceived)
-    async def on_group_message(self, ctx: EventContext):
+    async def on_message(self, ctx: EventContext):
         await self.ElysianRealmAssistant(ctx)
 
     def load_config(self):
