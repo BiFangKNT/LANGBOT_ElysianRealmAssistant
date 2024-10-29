@@ -73,7 +73,7 @@ class ElysianRealmAssistant(BasePlugin):
             self.ap.logger.info("乐土攻略助手：格式不匹配，不进行处理")
             return
 
-        optimized_message = self.convert_message(msg)
+        optimized_message = await self.convert_message(msg, ctx)
 
         if optimized_message:
             # 输出信息
@@ -101,24 +101,25 @@ class ElysianRealmAssistant(BasePlugin):
         else:
             self.ap.logger.info("消息处理后为空，不进行回复")
 
-    def convert_message(self, message):
+    async def convert_message(self, message, ctx):
         if message == "乐土list":
             return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
 
         if message == "乐土推荐":
-            return self.handle_recommendation()
+            await ctx.reply(mirai.MessageChain([mirai.Plain("已收到指令：“乐土推荐”\n正在为您查询推荐攻略……")]))
+            return await self.handle_recommendation(ctx)
 
         if "乐土list" in message:
             return self.handle_list_query(message)
 
-        return self.handle_normal_query(message)
+        return await self.handle_normal_query(message, ctx)
 
-    def handle_recommendation(self):
+    async def handle_recommendation(self, ctx):
         for key, values in self.config.items():
             if self.recommendation in values:
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
-                image_data = self.get_image(image_url, key)
-                if image_data:
+                image_data = await self.get_image(image_url, ctx)
+                if image_data and isinstance(image_data, mirai.Image):
                     return [
                         mirai.Plain(f"本期乐土推荐更新于{self.update_date}\n推荐为：\n"),
                         image_data
@@ -132,19 +133,19 @@ class ElysianRealmAssistant(BasePlugin):
                 return [mirai.Plain(yaml.dump({key: values}, allow_unicode=True))]
         return [mirai.Plain("未找到相关的乐土list信息。")]
 
-    def handle_normal_query(self, message):
+    async def handle_normal_query(self, message, ctx):
         for key, values in self.config.items():
             if message in values:
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
-                image_data = self.get_image(image_url, key)
-                if image_data:
+                image_data = await self.get_image(image_url, ctx)
+                if image_data and isinstance(image_data, mirai.Image):
                     return [
                         mirai.Plain("已为您找到攻略：\n"),
                         image_data
                     ]
         return [mirai.Plain("未找到相关的乐土攻略。")]
 
-    def get_image(self, url, filename):
+    async def get_image(self, url, ctx):
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
@@ -170,6 +171,7 @@ class ElysianRealmAssistant(BasePlugin):
                 #     return None
             else:
                 self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
+                await ctx.reply(mirai.MessageChain([mirai.Plain("图片下载失败，请稍后再试。")]))
         except Exception as e:
             self.ap.logger.info(f"获取图片时发生错误: {str(e)}")
         return None
