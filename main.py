@@ -171,7 +171,7 @@ class ElysianRealmAssistant(BasePlugin):
                 #     return None
             else:
                 self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
-                await ctx.reply(mirai.MessageChain([mirai.Plain("图片下载失败，请稍后再试。")]))
+                await ctx.reply(mirai.MessageChain([mirai.Plain(f"图片下载失败，状态码: {response.status_code}")]))
         except Exception as e:
             self.ap.logger.info(f"获取图片时发生错误: {str(e)}")
         return None
