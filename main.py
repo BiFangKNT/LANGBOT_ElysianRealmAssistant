@@ -22,7 +22,7 @@ class ElysianRealmAssistant(BasePlugin):
             rf'''
             ^(?:
                 ((.{{0,5}})乐土list) |                        # 匹配0-5个字符后跟"乐土list"
-                (乐土推荐) |                                  # 匹配"乐土推荐"
+                ((?:全部)?乐土推荐) |                         # 匹配"乐土推荐"或"全部乐土推荐"
                 (?P<角色乐土>(.{{1,5}})乐土\d?) |             # 匹配1-5个字符后跟"乐土"，可选择性地跟随一个数字
                 (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流)    # 匹配1-5个字符，后跟任意两个中文字符和"流"
             )$
@@ -102,14 +102,18 @@ class ElysianRealmAssistant(BasePlugin):
 
         if message == "乐土推荐":
             await ctx.reply(mirai.MessageChain([mirai.Plain("已收到指令：“乐土推荐”\n正在为您查询推荐攻略……")]))
-            return await self.handle_recommendation(ctx)
+            return await self.handle_recommendation(ctx, False)
+        
+        if message == "全部乐土推荐":
+            await ctx.reply(mirai.MessageChain([mirai.Plain("已收到指令：“全部乐土推荐”\n正在为您查询推荐攻略……")]))
+            return await self.handle_recommendation(ctx, True)
 
         if "乐土list" in message:
             return self.handle_list_query(message)
 
         return await self.handle_normal_query(message, ctx)
 
-    async def handle_recommendation(self, ctx):
+    async def handle_recommendation(self, ctx, is_all=False):
         url = "https://bbs-api.miyoushe.com/post/wapi/getPostFullInCollection?collection_id=1060106&gids=1&order_type=2"
         
         try:
@@ -128,10 +132,18 @@ class ElysianRealmAssistant(BasePlugin):
                     image_url = images[1]  # 获取第二张图片的URL
                     image_data = await self.get_image(image_url, ctx)
                     if image_data and isinstance(image_data, mirai.Image):
-                        return [
-                            mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
-                            image_data
-                        ]
+                        if is_all:
+                            image_urls = images[2:]  # 从第三张图片开始到最后的所有图片URL
+                            return [
+                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                image_data,
+                                mirai.Plain("\n" + "\n".join(image_urls))  # 将所有URL用换行符连接
+                            ]
+                        else:
+                            return [
+                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                image_data
+                            ]
             
         except Exception as e:
             self.ap.logger.info(f"获取推荐攻略时发生错误: {str(e)}")
