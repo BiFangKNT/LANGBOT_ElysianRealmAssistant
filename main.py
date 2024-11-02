@@ -107,6 +107,7 @@ class ElysianRealmAssistant(BasePlugin):
         if "乐土推荐" in message:
             sequence = int(message.split("乐土推荐")[1] or 1)
             return await self.handle_recommendation(ctx, False, sequence)
+            return await self.handle_recommendation(ctx, True)
 
         if "乐土list" in message:
             return self.handle_list_query(message)

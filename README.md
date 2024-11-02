@@ -41,7 +41,7 @@
 
 **效果展示**
 
-![image](https://github.com/user-attachments/assets/1bc153fa-638f-4326-af09-9f8ff6d4f845)
+![image](https://github.com/user-attachments/assets/8e1329af-c75f-44fa-89d2-16c61dc2125c)
 ![image](https://github.com/user-attachments/assets/e5edef8e-856b-4cf5-9aca-c12966708877)
 ![image](https://github.com/user-attachments/assets/0ff56e9f-8b57-4201-b549-639ccbeed87a)
 ![image](https://github.com/user-attachments/assets/7c1fdb53-1667-407c-8883-f4ef4e6dcb6e)
