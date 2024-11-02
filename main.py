@@ -98,6 +98,9 @@ class ElysianRealmAssistant(BasePlugin):
             self.ap.logger.info("消息处理后为空，不进行回复")
 
     async def convert_message(self, message, ctx):
+        # 统一的回复逻辑
+        await ctx.reply(mirai.MessageChain([mirai.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
+        
         if message == "乐土list":
             return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
         
@@ -110,8 +113,6 @@ class ElysianRealmAssistant(BasePlugin):
 
         if "乐土list" in message:
             return self.handle_list_query(message)
-
-        await ctx.reply(mirai.MessageChain([mirai.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
         
         # 其他情况
         return await self.handle_normal_query(message, ctx)
