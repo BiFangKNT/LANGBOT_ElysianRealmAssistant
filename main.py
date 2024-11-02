@@ -10,7 +10,7 @@ import imghdr
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.3", author="BiFangKNT")
+@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.4", author="BiFangKNT")
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
