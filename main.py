@@ -22,7 +22,8 @@ class ElysianRealmAssistant(BasePlugin):
             rf'''
             ^(?:
                 ((.{{0,5}})乐土list) |                        # 匹配0-5个字符后跟"乐土list"
-                (乐土推荐) |                                  # 匹配"乐土推荐"
+                (乐土推荐\d{{0,2}}) |                         # 匹配"乐土推荐"后跟0-2个数字
+                (全部乐土推荐) |                              # 匹配"全部乐土推荐"
                 (?P<角色乐土>(.{{1,5}})乐土\d?) |             # 匹配1-5个字符后跟"乐土"，可选择性地跟随一个数字
                 (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流)    # 匹配1-5个字符，后跟任意两个中文字符和"流"
             )$
@@ -99,17 +100,23 @@ class ElysianRealmAssistant(BasePlugin):
     async def convert_message(self, message, ctx):
         if message == "乐土list":
             return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
-
-        if message == "乐土推荐":
-            await ctx.reply(mirai.MessageChain([mirai.Plain("已收到指令：“乐土推荐”\n正在为您查询推荐攻略……")]))
-            return await self.handle_recommendation(ctx)
+        
+        if message == "全部乐土推荐":
+            return await self.handle_recommendation(ctx, True)
+        
+        if "乐土推荐" in message:
+            sequence = int(message.split("乐土推荐")[1] or 1)
+            return await self.handle_recommendation(ctx, False, sequence)
 
         if "乐土list" in message:
             return self.handle_list_query(message)
 
+        await ctx.reply(mirai.MessageChain([mirai.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
+        
+        # 其他情况
         return await self.handle_normal_query(message, ctx)
 
-    async def handle_recommendation(self, ctx):
+    async def handle_recommendation(self, ctx, is_all=False, sequence=1):
         url = "https://bbs-api.miyoushe.com/post/wapi/getPostFullInCollection?collection_id=1060106&gids=1&order_type=2"
         
         try:
@@ -125,23 +132,40 @@ class ElysianRealmAssistant(BasePlugin):
                 subject = posts[0].get("post", {}).get("subject", "")
                 reply_time = posts[0].get("post", {}).get("reply_time", "") 
                 if len(images) > 1:
-                    image_url = images[1]  # 获取第二张图片的URL
+                    if 1 <= sequence < len(images):
+                        image_url = images[sequence]  # sequence 直接对应图片索引
+                    else:
+                        self.ap.logger.info(f"序号超出范围，序号为：{sequence}")
+                        return [mirai.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
                     image_data = await self.get_image(image_url, ctx)
                     if image_data and isinstance(image_data, mirai.Image):
-                        return [
-                            mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
-                            image_data
-                        ]
-            
+                        if is_all:
+                            image_urls = images[2:]  # 从第三张图片开始到最后的所有图片URL
+                            return [
+                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                image_data,
+                                mirai.Plain("\n" + "\n".join(image_urls))  # 将所有URL用换行符连接
+                            ]
+                        else:
+                            return [
+                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                image_data
+                            ]
+        
         except Exception as e:
             self.ap.logger.info(f"获取推荐攻略时发生错误: {str(e)}")
             return [mirai.Plain("获取推荐攻略失败。")]
 
     def handle_list_query(self, message):
-        query = message.replace("list", "").strip()
+        query = message.replace("乐土list", "").strip()
+        matched_pairs = {}
         for key, values in self.config.items():
-            if query in values:
-                return [mirai.Plain(yaml.dump({key: values}, allow_unicode=True))]
+            if any(query in value for value in values):  # 检查是否在任何一个值中
+                self.ap.logger.info(f"找到匹配: {key}: {values}")
+                matched_pairs[key] = values
+        
+        if matched_pairs:
+            return [mirai.Plain(yaml.dump(matched_pairs, allow_unicode=True))]
         return [mirai.Plain("未找到相关的乐土list信息。")]
 
     async def handle_normal_query(self, message, ctx):
@@ -164,7 +188,7 @@ class ElysianRealmAssistant(BasePlugin):
                 image_base64 = base64.b64encode(response.content).decode('utf-8')
                 return mirai.Image(base64=image_base64)
 
-                # 方法2：使用URL
+                # 方法2：���用URL
                 # return mirai.Image(url=url)
 
                 # 方法3：下载到本地并验证
