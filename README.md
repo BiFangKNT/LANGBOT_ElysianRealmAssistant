@@ -39,12 +39,30 @@
 
 ## 使用
 
-**效果展示**
+**`乐土推荐`指令**
 
-![image](https://github.com/user-attachments/assets/8e1329af-c75f-44fa-89d2-16c61dc2125c)
-![image](https://github.com/user-attachments/assets/e5edef8e-856b-4cf5-9aca-c12966708877)
-![image](https://github.com/user-attachments/assets/0ff56e9f-8b57-4201-b549-639ccbeed87a)
-![image](https://github.com/user-attachments/assets/7c1fdb53-1667-407c-8883-f4ef4e6dcb6e)
+依照推荐度排序，支持添加序号请求
+
+![image](https://github.com/user-attachments/assets/9c30491c-8ad7-4aed-acfe-8ef29dab8dde)
+
+![image](https://github.com/user-attachments/assets/ea3ef8ea-ae9c-44c8-874b-117cc2707bef)
+
+**攻略搜索指令**
+
+![image](https://github.com/user-attachments/assets/4fea1c40-a954-4be9-baf0-6d37173dc68c)
+
+**`乐土list`指令**
+
+可查询相关关键词的列表，支持模糊匹配，输入`乐土list`可查询全文
+
+![image](https://github.com/user-attachments/assets/980d35a1-cf88-498a-bdae-1b88d356e894)
+
+**异常处理**
+
+![image](https://github.com/user-attachments/assets/96a3dc7b-9696-4fd0-bad0-fa46928a1a73)
+
+![image](https://github.com/user-attachments/assets/90aacfd5-f46a-45b2-aa6c-28289435623c)
+
 
 **角色名部分仅匹配五个字符**
 
