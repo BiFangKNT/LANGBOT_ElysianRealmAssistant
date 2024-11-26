@@ -6,11 +6,11 @@ import os
 import requests
 import time
 import base64
-import imghdr
+import hashlib
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.4", author="BiFangKNT")
+@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.5", author="BiFangKNT")
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
@@ -33,7 +33,7 @@ class ElysianRealmAssistant(BasePlugin):
 
     # 异步初始化
     async def initialize(self):
-        pass
+        self.clear_cache()  # 清理缓存
 
     @handler(PersonNormalMessageReceived)
     @handler(GroupNormalMessageReceived)
@@ -121,37 +121,53 @@ class ElysianRealmAssistant(BasePlugin):
         url = "https://bbs-api.miyoushe.com/post/wapi/getPostFullInCollection?collection_id=1060106&gids=1&order_type=2"
         
         try:
-            # 发送GET请求获取JSON数据
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
-            
-            # 获取第二张图片的URL
-            posts = data.get("data", {}).get("posts", [])
-            if posts:
-                images = posts[0].get("post", {}).get("images", [])
-                subject = posts[0].get("post", {}).get("subject", "")
-                reply_time = posts[0].get("post", {}).get("reply_time", "") 
-                if len(images) > 1:
-                    if 1 <= sequence < len(images):
-                        image_url = images[sequence]  # sequence 直接对应图片索引
-                    else:
-                        self.ap.logger.info(f"序号超出范围，序号为：{sequence}")
-                        return [mirai.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
-                    image_data = await self.get_image(image_url, ctx)
-                    if image_data and isinstance(image_data, mirai.Image):
-                        if is_all:
-                            image_urls = images[2:]  # 从第三张图片开始到最后的所有图片URL
-                            return [
-                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
-                                image_data,
-                                mirai.Plain("\n" + "\n".join(image_urls))  # 将所有URL用换行符连接
-                            ]
+            # 创建一个 Session 用于所有请求
+            with requests.Session() as session:
+                # 设置通用的 headers
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Connection': 'keep-alive'
+                })
+                
+                # 获取 API 数据
+                response = session.get(url)
+                response.raise_for_status()
+                data = response.json()
+                
+                posts = data.get("data", {}).get("posts", [])
+                if posts:
+                    images = posts[0].get("post", {}).get("images", [])
+                    subject = posts[0].get("post", {}).get("subject", "")
+                    reply_time = posts[0].get("post", {}).get("reply_time", "")
+                    
+                    if len(images) > 1:
+                        # 预缓存所有图片
+                        for idx, img_url in enumerate(images):
+                            url_md5 = hashlib.md5(img_url.encode()).hexdigest()
+                            self.ap.logger.info(f"预缓存第 {idx+1}/{len(images)} 张图片: {url_md5}")
+                            await self.get_image(img_url, ctx, session, preload=True)
+                        
+                        # 处理用户请求
+                        if 1 <= sequence < len(images):
+                            image_url = images[sequence]
+                            image_data = await self.get_image(image_url, ctx, session)
+                            if image_data and isinstance(image_data, mirai.Image):
+                                if is_all:
+                                    image_urls = images[2:]
+                                    return [
+                                        mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                        image_data,
+                                        mirai.Plain("\n" + "\n".join(image_urls))
+                                    ]
+                                else:
+                                    return [
+                                        mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                        image_data
+                                    ]
                         else:
-                            return [
-                                mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
-                                image_data
-                            ]
+                            self.ap.logger.info(f"序号超出范围，序号为：{sequence}")
+                            return [mirai.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
         
         except Exception as e:
             self.ap.logger.info(f"获取推荐攻略时发生错误: {str(e)}")
@@ -181,36 +197,130 @@ class ElysianRealmAssistant(BasePlugin):
                     ]
         return [mirai.Plain("未找到相关的乐土攻略。")]
 
-    async def get_image(self, url, ctx):
+    async def get_image(self, url, ctx, session=None, preload=False):
+        start_time = time.time()
         try:
-            response = requests.get(url, timeout=10)
+            # 生成MD5文件名
+            url_md5 = hashlib.md5(url.encode()).hexdigest()
+            
+            # 设置缓存目录
+            plugin_dir = os.path.dirname(os.path.abspath(__file__))
+            cache_dir = os.path.join(plugin_dir, 'cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, f"{url_md5}.jpg")
+            
+            # 检查缓存是否存在
+            if os.path.exists(cache_path):
+                cache_start = time.time()
+                self.ap.logger.info(f"使用缓存图片: {url_md5}")
+                with open(cache_path, 'rb') as f:
+                    image_data = f.read()
+                cache_time = time.time() - cache_start
+                self.ap.logger.info(f"缓存读取用时: {cache_time:.2f}秒")
+                
+                if preload:
+                    return True
+                return mirai.Image(base64=base64.b64encode(image_data).decode('utf-8'))
+            
+            # 如果缓存不存在，使用传入的 session 或创建新的 session
+            if session is None:
+                self.ap.logger.info("未传入 session，创建新的 session")
+                session = requests.Session()
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Connection': 'keep-alive'
+                })
+            else:
+                self.ap.logger.info("使用传入的 session")
+            
+            # 使用 session 下载图片
+            dns_start = time.time()
+            response = session.get(url, timeout=10)
+            dns_time = time.time() - dns_start
+            
+            # 记录响应信息
+            self.ap.logger.debug(f"DNS解析用时: {dns_time:.2f}秒")
+            self.ap.logger.debug(f"响应状态: {response.status_code}")
+            
             if response.status_code == 200:
-                # 方法1：使用Base64编码
-                image_base64 = base64.b64encode(response.content).decode('utf-8')
-                return mirai.Image(base64=image_base64)
-
-                # 方法2：使用URL
-                # return mirai.Image(url=url)
-
-                # 方法3：下载到本地并验证
-                # plugin_dir = os.path.dirname(os.path.abspath(__file__))
-                # cache_dir = os.path.join(plugin_dir, 'cache')
-                # os.makedirs(cache_dir, exist_ok=True)
-                # local_path = os.path.join(cache_dir, f"{filename}.jpg")
-                # with open(local_path, 'wb') as f:
-                #     f.write(response.content)
-                # if imghdr.what(local_path) == 'jpeg':
-                #     self.ap.logger.info(f"图片已下载到本地并验证: {local_path}")
-                #     return mirai.Image(path=local_path)
-                # else:
-                #     self.ap.logger.warning(f"下载的文件不是有效的JPEG图片: {local_path}")
-                #     return None
+                # 下载信息统计
+                size_mb = len(response.content) / (1024 * 1024)
+                download_time = time.time() - dns_start
+                self.ap.logger.debug(f"图片大小: {size_mb:.2f}MB")
+                self.ap.logger.debug(f"下载用时: {download_time:.2f}秒")
+                self.ap.logger.debug(f"下载速度: {size_mb/download_time:.2f}MB/s")
+                
+                # 保存到缓存
+                save_start = time.time()
+                with open(cache_path, 'wb') as f:
+                    f.write(response.content)
+                save_time = time.time() - save_start
+                self.ap.logger.debug(f"缓存保存用时: {save_time:.2f}秒")
+                
+                # 总耗时统计
+                total_time = time.time() - start_time
+                self.ap.logger.debug(f"总处理用时: {total_time:.2f}秒")
+                
+                if preload:
+                    return True
+                return mirai.Image(base64=base64.b64encode(response.content).decode('utf-8'))
             else:
                 self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
-                await ctx.reply(mirai.MessageChain([mirai.Plain(f"图片下载失败，状态码: {response.status_code}")]))
+                if not preload:
+                    await ctx.reply(mirai.MessageChain([mirai.Plain(f"图片下载失败，状态码: {response.status_code}")]))
+                return False if preload else None
+            
         except Exception as e:
+            total_time = time.time() - start_time
             self.ap.logger.info(f"获取图片时发生错误: {str(e)}")
-        return None
+            self.ap.logger.info(f"失败用时: {total_time:.2f}秒")
+            return False if preload else None
+
+    def clear_cache(self, max_age_days=365, max_size_mb=1000):
+        """清理缓存文件
+        Args:
+            max_age_days: 最大保留天数
+            max_size_mb: 缓存文件夹最大容量(MB)
+        """
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+        if not os.path.exists(cache_dir):
+            return
+        
+        # 1. 按时间清理
+        current_time = time.time()
+        for filename in os.listdir(cache_dir):
+            filepath = os.path.join(cache_dir, filename)
+            # 检查文件年龄
+            if os.path.getmtime(filepath) < current_time - (max_age_days * 86400):
+                try:
+                    os.remove(filepath)
+                    self.ap.logger.info(f"已删除过期缓存文件: {filepath}")
+                except Exception as e:
+                    self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
+                
+        # 2. 检查总大小
+        total_size = sum(os.path.getsize(os.path.join(cache_dir, f)) 
+                        for f in os.listdir(cache_dir)) / (1024 * 1024)  # 转换为MB
+        
+        # 3. 如果超过最大容量，删除最旧的文件
+        if total_size > max_size_mb:
+            files = [(os.path.join(cache_dir, f), os.path.getmtime(os.path.join(cache_dir, f))) 
+                    for f in os.listdir(cache_dir)]
+            # 按修改时间排序
+            files.sort(key=lambda x: x[1])
+            
+            # 删除旧文件直到总大小小于限制
+            for filepath, _ in files:
+                if total_size <= max_size_mb:
+                    break
+                try:
+                    file_size = os.path.getsize(filepath) / (1024 * 1024)
+                    os.remove(filepath)
+                    total_size -= file_size
+                    self.ap.logger.info(f"因空间限制删除缓存文件: {filepath}")
+                except Exception as e:
+                    self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
 
     # 插件卸载时触发
     def __del__(self):
