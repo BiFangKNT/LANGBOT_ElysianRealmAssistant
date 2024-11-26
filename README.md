@@ -76,4 +76,6 @@
 ![image](https://github.com/user-attachments/assets/978c7dd8-e5b7-4d77-810e-a371ceceed53)
 
 
+**v1.5更新说明**
 
+米游社图片获取部分，不知道是不是个例，dns解析耗时过长，因此加入缓存机制；单次缓存中采用单session复用方案，加快缓存速度。
