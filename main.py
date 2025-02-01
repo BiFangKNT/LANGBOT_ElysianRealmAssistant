@@ -28,7 +28,7 @@ class ElysianRealmAssistant(BasePlugin):
                 (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流) |  # 匹配1-5个字符，后跟任意两个中文字符和"流"
                 (?P<添加命令>RealmCommand\s+add\s+(\w+)\s+([^,]+(?:,[^,]+)*))  # 匹配添加命令
             )$
-            '''，
+            ''',
             re.VERBOSE | re.UNICODE
         )
 
