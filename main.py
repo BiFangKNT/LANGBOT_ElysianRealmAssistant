@@ -10,7 +10,7 @@ import hashlib
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.5", author="BiFangKNT")
+@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.6", author="BiFangKNT")
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
@@ -25,7 +25,8 @@ class ElysianRealmAssistant(BasePlugin):
                 (乐土推荐\d{{0,2}}) |                         # 匹配"乐土推荐"后跟0-2个数字
                 (全部乐土推荐) |                              # 匹配"全部乐土推荐"
                 (?P<角色乐土>(.{{1,5}})乐土\d?) |             # 匹配1-5个字符后跟"乐土"，可选择性地跟随一个数字
-                (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流)    # 匹配1-5个字符，后跟任意两个中文字符和"流"
+                (?P<角色流派>(.{{1,5}})(\p{{Han}}{{2}})流) |  # 匹配1-5个字符，后跟任意两个中文字符和"流"
+                (?P<添加命令>/RealmCommand\s+add\s+(\w+)\s+([^,]+(?:,[^,]+)*))  # 匹配添加命令
             )$
             ''',
             re.VERBOSE | re.UNICODE
@@ -100,6 +101,11 @@ class ElysianRealmAssistant(BasePlugin):
     async def convert_message(self, message, ctx):
         # 统一的回复逻辑
         await ctx.reply(mirai.MessageChain([mirai.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
+        
+        # 检查是否是添加命令
+        match = self.url_pattern.search(message)
+        if match and match.group('添加命令'):
+            return await self.handle_add_command(match.group('添加命令'))
         
         if message == "乐土list":
             return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
@@ -321,6 +327,45 @@ class ElysianRealmAssistant(BasePlugin):
                     self.ap.logger.info(f"因空间限制删除缓存文件: {filepath}")
                 except Exception as e:
                     self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
+
+    # 添加新的处理函数
+    async def handle_add_command(self, command):
+        try:
+            # 解析命令
+            _, _, key, values = command.split(None, 3)
+            value_list = [v.strip() for v in values.split(',')]
+            
+            # 读取当前配置
+            plugin_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(plugin_dir, 'ElysianRealmConfig.yaml')
+            
+            with open(config_path, 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file) or {}
+            
+            # 更新或添加键值对
+            if key in config:
+                # 添加新值到现有列表，避免重复
+                config[key].extend(v for v in value_list if v not in config[key])
+            else:
+                # 创建新的键值对
+                config[key] = value_list
+            
+            # 写回文件
+            with open(config_path, 'w', encoding='utf-8') as file:
+                yaml.dump(config, file, allow_unicode=True, sort_keys=False)
+            
+            # 重新加载配置
+            self.config = config
+            
+            # 返回更新后的键值对
+            if key in config:
+                return [mirai.Plain(f"已成功添加/更新配置：\n{key}:\n  - " + "\n  - ".join(config[key]))]
+            else:
+                return [mirai.Plain("添加配置失败。")]
+            
+        except Exception as e:
+            self.ap.logger.info(f"添加配置时发生错误: {str(e)}")
+            return [mirai.Plain(f"添加配置失败: {str(e)}")]
 
     # 插件卸载时触发
     def __del__(self):
