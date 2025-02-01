@@ -1,5 +1,6 @@
 from pkg.plugin.context import register, handler, llm_func, BasePlugin, APIHost, EventContext
 from pkg.plugin.events import *  # 导入事件类
+import pkg.platform.types as platform_types
 import yaml
 import regex as re
 import os
@@ -100,7 +101,7 @@ class ElysianRealmAssistant(BasePlugin):
 
     async def convert_message(self, message, ctx):
         # 统一的回复逻辑
-        await ctx.reply(mirai.MessageChain([mirai.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
+        await ctx.reply(platform_types.MessageChain([platform_types.Plain(f"已收到指令：{message}\n正在为您查询攻略……")]))
         
         # 检查是否是添加命令
         match = self.url_pattern.search(message)
@@ -108,7 +109,7 @@ class ElysianRealmAssistant(BasePlugin):
             return await self.handle_add_command(match.group('添加命令'))
         
         if message == "乐土list":
-            return [mirai.Plain(yaml.dump(self.config, allow_unicode=True))]
+            return [platform_types.Plain(yaml.dump(self.config, allow_unicode=True))]
         
         if message == "全部乐土推荐":
             return await self.handle_recommendation(ctx, True)
@@ -158,26 +159,26 @@ class ElysianRealmAssistant(BasePlugin):
                         if 1 <= sequence < len(images):
                             image_url = images[sequence]
                             image_data = await self.get_image(image_url, ctx, session)
-                            if image_data and isinstance(image_data, mirai.Image):
+                            if image_data and isinstance(image_data, platform_types.Image):
                                 if is_all:
                                     image_urls = images[2:]
                                     return [
-                                        mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                        platform_types.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
                                         image_data,
-                                        mirai.Plain("\n" + "\n".join(image_urls))
+                                        platform_types.Plain("\n" + "\n".join(image_urls))
                                     ]
                                 else:
                                     return [
-                                        mirai.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
+                                        platform_types.Plain(f"标题：{subject}\n更新时间：{reply_time}\n本期乐土推荐为：\n"),
                                         image_data
                                     ]
                         else:
                             self.ap.logger.info(f"序号超出范围，序号为：{sequence}")
-                            return [mirai.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
+                            return [platform_types.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
         
         except Exception as e:
             self.ap.logger.info(f"获取推荐攻略时发生错误: {str(e)}")
-            return [mirai.Plain("获取推荐攻略失败。")]
+            return [platform_types.Plain("获取推荐攻略失败。")]
 
     def handle_list_query(self, message):
         query = message.replace("乐土list", "").strip()
@@ -188,20 +189,20 @@ class ElysianRealmAssistant(BasePlugin):
                 matched_pairs[key] = values
         
         if matched_pairs:
-            return [mirai.Plain(yaml.dump(matched_pairs, allow_unicode=True))]
-        return [mirai.Plain("未找到相关的乐土list信息。")]
+            return [platform_types.Plain(yaml.dump(matched_pairs, allow_unicode=True))]
+        return [platform_types.Plain("未找到相关的乐土list信息。")]
 
     async def handle_normal_query(self, message, ctx):
         for key, values in self.config.items():
             if message in values:
                 image_url = f"https://raw.githubusercontent.com/BiFangKNT/ElysianRealm-Data/refs/heads/master/{key}.jpg"
                 image_data = await self.get_image(image_url, ctx)
-                if image_data and isinstance(image_data, mirai.Image):
+                if image_data and isinstance(image_data, platform_types.Image):
                     return [
-                        mirai.Plain("已为您找到攻略：\n"),
+                        platform_types.Plain("已为您找到攻略：\n"),
                         image_data
                     ]
-        return [mirai.Plain("未找到相关的乐土攻略。")]
+        return [platform_types.Plain("未找到相关的乐土攻略。")]
 
     async def get_image(self, url, ctx, session=None, preload=False):
         start_time = time.time()
@@ -226,7 +227,7 @@ class ElysianRealmAssistant(BasePlugin):
                 
                 if preload:
                     return True
-                return mirai.Image(base64=base64.b64encode(image_data).decode('utf-8'))
+                return platform_types.Image(base64=base64.b64encode(image_data).decode('utf-8'))
             
             # 如果缓存不存在，使用传入的 session 或创建新的 session
             if session is None:
@@ -270,11 +271,11 @@ class ElysianRealmAssistant(BasePlugin):
                 
                 if preload:
                     return True
-                return mirai.Image(base64=base64.b64encode(response.content).decode('utf-8'))
+                return platform_types.Image(base64=base64.b64encode(response.content).decode('utf-8'))
             else:
                 self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
                 if not preload:
-                    await ctx.reply(mirai.MessageChain([mirai.Plain(f"图片下载失败，状态码: {response.status_code}")]))
+                    await ctx.reply(platform_types.MessageChain([platform_types.Plain(f"图片下载失败，状态码: {response.status_code}")]))
                 return False if preload else None
             
         except Exception as e:
@@ -359,13 +360,13 @@ class ElysianRealmAssistant(BasePlugin):
             
             # 返回更新后的键值对
             if key in config:
-                return [mirai.Plain(f"已成功添加/更新配置：\n{key}:\n  - " + "\n  - ".join(config[key]))]
+                return [platform_types.Plain(f"已成功添加/更新配置：\n{key}:\n  - " + "\n  - ".join(config[key]))]
             else:
-                return [mirai.Plain("添加配置失败。")]
+                return [platform_types.Plain("添加配置失败。")]
             
         except Exception as e:
             self.ap.logger.info(f"添加配置时发生错误: {str(e)}")
-            return [mirai.Plain(f"添加配置失败: {str(e)}")]
+            return [platform_types.Plain(f"添加配置失败: {str(e)}")]
 
     # 插件卸载时触发
     def __del__(self):
