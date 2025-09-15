@@ -131,3 +131,5 @@ dmypy.json
 ElysianRealmConfig.yaml.orig
 main.py.orig
 cache/
+.claude/settings.local.json
+test*.py

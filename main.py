@@ -11,7 +11,7 @@ import hashlib
 
 
 # 注册插件
-@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.6", author="BiFangKNT")
+@register(name="ElysianRealmAssistant", description="崩坏3往世乐土攻略助手", version="1.7.0", author="BiFangKNT")
 class ElysianRealmAssistant(BasePlugin):
 
     # 插件加载时触发
@@ -125,24 +125,43 @@ class ElysianRealmAssistant(BasePlugin):
         return await self.handle_normal_query(message, ctx)
 
     async def handle_recommendation(self, ctx, is_all=False, sequence=1):
-        url = "https://bbs-api.miyoushe.com/post/wapi/getPostFullInCollection?collection_id=1060106&gids=1&order_type=2"
-        
+        """
+        处理乐土推荐攻略请求
+        从米游社用户文章中获取最新的往世乐土推荐内容
+        """
+        url = "https://bbs-api.miyoushe.com/post/wapi/userPost?uid=5625196"
+
         try:
             # 创建一个 Session 用于所有请求
             with requests.Session() as session:
                 # 设置通用的 headers
                 session.headers.update({
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                     'Connection': 'keep-alive'
                 })
-                
+
                 # 获取 API 数据
                 response = session.get(url)
                 response.raise_for_status()
                 data = response.json()
-                
-                posts = data.get("data", {}).get("posts", [])
+
+                # 从新API结构中获取文章列表
+                posts = data.get("data", {}).get("list", [])
+
+                # 过滤出往世乐土推荐文章
+                import re
+                pattern = r'往世乐土丨V\d+\.\d+[一二三四五六七八九十]+期推荐角色BUFF表'
+
+                elysian_posts = []
+                for post_item in posts:
+                    post = post_item.get("post", {})
+                    subject = post.get("subject", "")
+                    if re.search(pattern, subject):
+                        elysian_posts.append(post_item)
+
+                posts = elysian_posts
                 if posts:
                     images = posts[0].get("post", {}).get("images", [])
                     subject = posts[0].get("post", {}).get("subject", "")
