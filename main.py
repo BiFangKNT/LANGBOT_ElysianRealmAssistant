@@ -1,10 +1,12 @@
+import asyncio
+from typing import Optional
 from pkg.plugin.context import register, handler, llm_func, BasePlugin, APIHost, EventContext
 from pkg.plugin.events import *  # 导入事件类
 import pkg.platform.types as platform_types
 import yaml
 import regex as re
 import os
-import requests
+import httpx
 import time
 import base64
 import hashlib
@@ -17,7 +19,7 @@ class ElysianRealmAssistant(BasePlugin):
     # 插件加载时触发
     def __init__(self, host: APIHost):
         super().__init__(host)
-        self.config = self.load_config()
+        self.config = {}
         
         self.url_pattern = re.compile(
             rf'''
@@ -35,29 +37,33 @@ class ElysianRealmAssistant(BasePlugin):
 
     # 异步初始化
     async def initialize(self):
-        self.clear_cache()  # 清理缓存
+        self.config = await self.load_config()
+        await self.clear_cache()  # 清理缓存
 
     @handler(PersonNormalMessageReceived)
     @handler(GroupNormalMessageReceived)
     async def on_message(self, ctx: EventContext):
         await self.ElysianRealmAssistant(ctx)
 
-    def load_config(self):
+    async def load_config(self):
         plugin_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(plugin_dir, 'ElysianRealmConfig.yaml')
-        
-        try:
-            with open(config_path, 'r', encoding='utf-8') as file:
-                return yaml.safe_load(file)
-        except FileNotFoundError:
-            self.ap.logger.info(f"配置文件未找到: {config_path}")
-            return {}
-        except yaml.YAMLError as e:
-            self.ap.logger.info(f"解析YAML文件时出错: {e}")
-            return {}
-        except Exception as e:
-            self.ap.logger.info(f"加载配置文件时发生未知错误: {e}")
-            return {}
+
+        def _load() -> dict:
+            try:
+                with open(config_path, 'r', encoding='utf-8') as file:
+                    return yaml.safe_load(file) or {}
+            except FileNotFoundError:
+                self.ap.logger.info(f"配置文件未找到: {config_path}")
+                return {}
+            except yaml.YAMLError as e:
+                self.ap.logger.info(f"解析YAML文件时出错: {e}")
+                return {}
+            except Exception as e:
+                self.ap.logger.info(f"加载配置文件时发生未知错误: {e}")
+                return {}
+
+        return await asyncio.to_thread(_load)
 
     async def ElysianRealmAssistant(self, ctx: EventContext):
 
@@ -87,7 +93,7 @@ class ElysianRealmAssistant(BasePlugin):
                 except Exception as e:
                     if attempt < max_retries - 1:
                         self.ap.logger.info(f"发送消息失败，正在重试 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                        time.sleep(1)  # 等待1秒后重试
+                        await asyncio.sleep(1)  # 等待1秒后重试
                     else:
                         self.ap.logger.info(f"发送消息失败，已达到最大重试次数: {str(e)}")
 
@@ -132,26 +138,20 @@ class ElysianRealmAssistant(BasePlugin):
         url = "https://bbs-api.miyoushe.com/post/wapi/userPost?uid=5625196"
 
         try:
-            # 创建一个 Session 用于所有请求
-            with requests.Session() as session:
-                # 设置通用的 headers
-                session.headers.update({
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                    'Connection': 'keep-alive'
-                })
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Connection': 'keep-alive'
+            }
 
-                # 获取 API 数据
-                response = session.get(url)
+            async with httpx.AsyncClient(headers=headers, timeout=10.0) as client:
+                response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
 
-                # 从新API结构中获取文章列表
                 posts = data.get("data", {}).get("list", [])
 
-                # 过滤出往世乐土推荐文章
-                import re
                 pattern = r'往世乐土丨V\d+\.\d+[一二三四五六七八九十]+期推荐角色BUFF表'
 
                 elysian_posts = []
@@ -166,18 +166,16 @@ class ElysianRealmAssistant(BasePlugin):
                     images = posts[0].get("post", {}).get("images", [])
                     subject = posts[0].get("post", {}).get("subject", "")
                     reply_time = posts[0].get("post", {}).get("reply_time", "")
-                    
+
                     if len(images) > 1:
-                        # 预缓存所有图片
                         for idx, img_url in enumerate(images):
                             url_md5 = hashlib.md5(img_url.encode()).hexdigest()
                             self.ap.logger.info(f"预缓存第 {idx+1}/{len(images)} 张图片: {url_md5}")
-                            await self.get_image(img_url, ctx, session, preload=True)
-                        
-                        # 处理用户请求
+                            await self.get_image(img_url, ctx, client=client, preload=True)
+
                         if 1 <= sequence < len(images):
                             image_url = images[sequence]
-                            image_data = await self.get_image(image_url, ctx, session)
+                            image_data = await self.get_image(image_url, ctx, client=client)
                             if image_data and isinstance(image_data, platform_types.Image):
                                 if is_all:
                                     image_urls = images[2:]
@@ -194,7 +192,7 @@ class ElysianRealmAssistant(BasePlugin):
                         else:
                             self.ap.logger.info(f"序号超出范围，序号为：{sequence}")
                             return [platform_types.Plain(f"序号超出范围，请输入1至{len(images) - 1}之间的序号。")]
-        
+
         except Exception as e:
             self.ap.logger.info(f"获取推荐攻略时发生错误: {str(e)}")
             return [platform_types.Plain("获取推荐攻略失败。")]
@@ -223,130 +221,138 @@ class ElysianRealmAssistant(BasePlugin):
                     ]
         return [platform_types.Plain("未找到相关的乐土攻略。")]
 
-    async def get_image(self, url, ctx, session=None, preload=False):
+    async def get_image(self, url, ctx, client: Optional[httpx.AsyncClient] = None, preload: bool = False):
         start_time = time.time()
+
+        def _read_file_bytes(path: str) -> bytes:
+            with open(path, 'rb') as file:
+                return file.read()
+
+        def _write_file_bytes(path: str, data: bytes) -> None:
+            with open(path, 'wb') as file:
+                file.write(data)
+
         try:
-            # 生成MD5文件名
             url_md5 = hashlib.md5(url.encode()).hexdigest()
-            
-            # 设置缓存目录
+
             plugin_dir = os.path.dirname(os.path.abspath(__file__))
             cache_dir = os.path.join(plugin_dir, 'cache')
-            os.makedirs(cache_dir, exist_ok=True)
+            await asyncio.to_thread(lambda: os.makedirs(cache_dir, exist_ok=True))
             cache_path = os.path.join(cache_dir, f"{url_md5}.jpg")
-            
-            # 检查缓存是否存在
-            if os.path.exists(cache_path):
+
+            cache_exists = await asyncio.to_thread(os.path.exists, cache_path)
+            if cache_exists:
                 cache_start = time.time()
                 self.ap.logger.info(f"使用缓存图片: {url_md5}")
-                with open(cache_path, 'rb') as f:
-                    image_data = f.read()
+                image_data = await asyncio.to_thread(_read_file_bytes, cache_path)
                 cache_time = time.time() - cache_start
                 self.ap.logger.info(f"缓存读取用时: {cache_time:.2f}秒")
-                
+
                 if preload:
                     return True
                 return platform_types.Image(base64=base64.b64encode(image_data).decode('utf-8'))
-            
-            # 如果缓存不存在，使用传入的 session 或创建新的 session
-            if session is None:
-                self.ap.logger.info("未传入 session，创建新的 session")
-                session = requests.Session()
-                session.headers.update({
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-                    'Connection': 'keep-alive'
-                })
-            else:
-                self.ap.logger.info("使用传入的 session")
-            
-            # 使用 session 下载图片
-            dns_start = time.time()
-            response = session.get(url, timeout=10)
-            dns_time = time.time() - dns_start
-            
-            # 记录响应信息
-            self.ap.logger.debug(f"DNS解析用时: {dns_time:.2f}秒")
-            self.ap.logger.debug(f"响应状态: {response.status_code}")
-            
-            if response.status_code == 200:
-                # 下载信息统计
-                size_mb = len(response.content) / (1024 * 1024)
-                download_time = time.time() - dns_start
-                self.ap.logger.debug(f"图片大小: {size_mb:.2f}MB")
-                self.ap.logger.debug(f"下载用时: {download_time:.2f}秒")
-                self.ap.logger.debug(f"下载速度: {size_mb/download_time:.2f}MB/s")
-                
-                # 保存到缓存
-                save_start = time.time()
-                with open(cache_path, 'wb') as f:
-                    f.write(response.content)
-                save_time = time.time() - save_start
-                self.ap.logger.debug(f"缓存保存用时: {save_time:.2f}秒")
-                
-                # 总耗时统计
-                total_time = time.time() - start_time
-                self.ap.logger.debug(f"总处理用时: {total_time:.2f}秒")
-                
-                if preload:
-                    return True
-                return platform_types.Image(base64=base64.b64encode(response.content).decode('utf-8'))
-            else:
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                'Connection': 'keep-alive'
+            }
+
+            async def _download_image(active_client: httpx.AsyncClient):
+                dns_start = time.time()
+                response = await active_client.get(url)
+                dns_time = time.time() - dns_start
+
+                self.ap.logger.debug(f"DNS解析用时: {dns_time:.2f}秒")
+                self.ap.logger.debug(f"响应状态: {response.status_code}")
+
+                if response.status_code == 200:
+                    content = response.content
+                    size_mb = len(content) / (1024 * 1024)
+                    download_time = max(time.time() - dns_start, 1e-6)
+                    self.ap.logger.debug(f"图片大小: {size_mb:.2f}MB")
+                    self.ap.logger.debug(f"下载用时: {download_time:.2f}秒")
+                    self.ap.logger.debug(f"下载速度: {size_mb/download_time:.2f}MB/s")
+
+                    save_start = time.time()
+                    await asyncio.to_thread(_write_file_bytes, cache_path, content)
+                    save_time = time.time() - save_start
+                    self.ap.logger.debug(f"缓存保存用时: {save_time:.2f}秒")
+
+                    total_time = time.time() - start_time
+                    self.ap.logger.debug(f"总处理用时: {total_time:.2f}秒")
+
+                    if preload:
+                        return True
+                    return platform_types.Image(base64=base64.b64encode(content).decode('utf-8'))
+
                 self.ap.logger.info(f"下载图片失败，状态码: {response.status_code}")
                 if not preload:
-                    await ctx.reply(platform_types.MessageChain([platform_types.Plain(f"图片下载失败，状态码: {response.status_code}")]))
+                    await ctx.reply(platform_types.MessageChain([
+                        platform_types.Plain(f"图片下载失败，状态码: {response.status_code}")
+                    ]))
                 return False if preload else None
-            
+
+            if client is None:
+                self.ap.logger.info("未传入客户端，创建新的 AsyncClient")
+                async with httpx.AsyncClient(headers=headers, timeout=10.0) as new_client:
+                    return await _download_image(new_client)
+            else:
+                self.ap.logger.info("使用传入的 AsyncClient")
+                return await _download_image(client)
+
         except Exception as e:
             total_time = time.time() - start_time
             self.ap.logger.info(f"获取图片时发生错误: {str(e)}")
             self.ap.logger.info(f"失败用时: {total_time:.2f}秒")
             return False if preload else None
 
-    def clear_cache(self, max_age_days=365, max_size_mb=1000):
+    async def clear_cache(self, max_age_days=365, max_size_mb=1000):
         """清理缓存文件
         Args:
             max_age_days: 最大保留天数
             max_size_mb: 缓存文件夹最大容量(MB)
         """
-        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
-        if not os.path.exists(cache_dir):
-            return
-        
-        # 1. 按时间清理
-        current_time = time.time()
-        for filename in os.listdir(cache_dir):
-            filepath = os.path.join(cache_dir, filename)
-            # 检查文件年龄
-            if os.path.getmtime(filepath) < current_time - (max_age_days * 86400):
-                try:
-                    os.remove(filepath)
-                    self.ap.logger.info(f"已删除过期缓存文件: {filepath}")
-                except Exception as e:
-                    self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
-                
-        # 2. 检查总大小
-        total_size = sum(os.path.getsize(os.path.join(cache_dir, f)) 
-                        for f in os.listdir(cache_dir)) / (1024 * 1024)  # 转换为MB
-        
-        # 3. 如果超过最大容量，删除最旧的文件
-        if total_size > max_size_mb:
-            files = [(os.path.join(cache_dir, f), os.path.getmtime(os.path.join(cache_dir, f))) 
-                    for f in os.listdir(cache_dir)]
-            # 按修改时间排序
-            files.sort(key=lambda x: x[1])
-            
-            # 删除旧文件直到总大小小于限制
-            for filepath, _ in files:
-                if total_size <= max_size_mb:
-                    break
-                try:
-                    file_size = os.path.getsize(filepath) / (1024 * 1024)
-                    os.remove(filepath)
-                    total_size -= file_size
-                    self.ap.logger.info(f"因空间限制删除缓存文件: {filepath}")
-                except Exception as e:
-                    self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
+
+        def _clear():
+            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+            if not os.path.exists(cache_dir):
+                return
+
+            current_time = time.time()
+            for filename in os.listdir(cache_dir):
+                filepath = os.path.join(cache_dir, filename)
+                if os.path.getmtime(filepath) < current_time - (max_age_days * 86400):
+                    try:
+                        os.remove(filepath)
+                        self.ap.logger.info(f"已删除过期缓存文件: {filepath}")
+                    except Exception as e:
+                        self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
+
+            total_size = sum(
+                os.path.getsize(os.path.join(cache_dir, f))
+                for f in os.listdir(cache_dir)
+            ) / (1024 * 1024)
+
+            if total_size > max_size_mb:
+                files = [
+                    (os.path.join(cache_dir, f), os.path.getmtime(os.path.join(cache_dir, f)))
+                    for f in os.listdir(cache_dir)
+                ]
+                files.sort(key=lambda x: x[1])
+
+                for filepath, _ in files:
+                    if total_size <= max_size_mb:
+                        break
+                    try:
+                        file_size = os.path.getsize(filepath) / (1024 * 1024)
+                        os.remove(filepath)
+                        total_size -= file_size
+                        self.ap.logger.info(f"因空间限制删除缓存文件: {filepath}")
+                    except Exception as e:
+                        self.ap.logger.info(f"删除缓存文件失败: {str(e)}")
+
+        await asyncio.to_thread(_clear)
 
     # 添加新的处理函数
     async def handle_add_command(self, command):
@@ -358,9 +364,14 @@ class ElysianRealmAssistant(BasePlugin):
             # 读取当前配置
             plugin_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(plugin_dir, 'ElysianRealmConfig.yaml')
-            
-            with open(config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file) or {}
+
+            def _read_config() -> dict:
+                if not os.path.exists(config_path):
+                    return {}
+                with open(config_path, 'r', encoding='utf-8') as file:
+                    return yaml.safe_load(file) or {}
+
+            config = await asyncio.to_thread(_read_config)
             
             # 更新或添加键值对
             if key in config:
@@ -371,12 +382,15 @@ class ElysianRealmAssistant(BasePlugin):
                 config[key] = value_list
             
             # 写回文件
-            with open(config_path, 'w', encoding='utf-8') as file:
-                yaml.dump(config, file, allow_unicode=True, sort_keys=False)
+            def _write_config(data: dict) -> None:
+                with open(config_path, 'w', encoding='utf-8') as file:
+                    yaml.dump(data, file, allow_unicode=True, sort_keys=False)
+
+            await asyncio.to_thread(_write_config, config)
             
             # 重新加载配置
             self.config = config
-            
+
             # 返回更新后的键值对
             if key in config:
                 return [platform_types.Plain(f"已成功添加/更新配置：\n{key}:\n  - " + "\n  - ".join(config[key]))]
